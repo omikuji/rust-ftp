@@ -414,8 +414,48 @@ impl FtpStream {
     ) -> Result<Vec<String>> {
         let mut lines: Vec<String> = Vec::new();
         {
-            let mut data_stream = BufReader::new(try!(self.data_command(&cmd)));
-            try!(self.read_response_in(&[open_code, status::ALREADY_OPEN]));
+            let cmd = self.data_command(&cmd)?;
+            let mut data_stream = BufReader::new(cmd);
+            self.read_response_in(&[open_code, status::ALREADY_OPEN])?;
+
+            let mut line = String::new();
+            loop {
+                match data_stream.read_to_string(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => lines.extend(
+                        line.split("\r\n")
+                            .into_iter()
+                            .map(|s| String::from(s))
+                            .filter(|s| s.len() > 0),
+                    ),
+                    Err(err) => return Err(FtpError::ConnectionError(err)),
+                };
+            }
+        }
+
+        self.read_response_in(close_code).map(|_| lines)
+    }
+
+    /// Execute "MLSD" command that can display hidden files.
+    /// If `pathname` is omited then the list of files in the current directory will be
+    /// returned otherwise it will the list of files on `pathname`.
+    pub fn mlsd(&mut self, pathname: Option<&str>) -> Result<Vec<String>> {
+        let cmd: Cow<'static, str> = pathname.map_or("MLSD\r\n".into(), |path| {
+            format!("MLSD {}\r\n", path).into()
+        });
+
+        let open_code = status::ABOUT_TO_SEND;
+
+        let close_code = &[
+            status::CLOSING_DATA_CONNECTION,
+            status::REQUESTED_FILE_ACTION_OK,
+        ];
+
+        let mut lines: Vec<String> = Vec::new();
+        {
+            let cmd = self.data_command(&cmd)?;
+            let mut data_stream = BufReader::new(cmd);
+            self.read_response_in(&[open_code, status::ALREADY_OPEN])?;
 
             let mut line = String::new();
             loop {
