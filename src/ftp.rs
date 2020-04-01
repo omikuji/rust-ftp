@@ -456,24 +456,10 @@ impl FtpStream {
             let cmd = self.data_command(&cmd)?;
             let mut data_stream = BufReader::new(cmd);
             self.read_response_in(&[open_code, status::ALREADY_OPEN])?;
-
-            let mut line = Vec::new();
-
-            loop {
-                let _ = data_stream.read_to_end(&mut line);
-                if line.len() == 0 {
-                    break;
-                }
-                lines.append(&mut line);
-            }
+            let _ = data_stream.read_to_end(&mut lines);
         }
 
-        let string = lines
-            .iter()
-            .map(|&s| s as char)
-            .collect::<String>();
-
-        let result: Vec<_> = string
+        let result: Vec<_> = String::from_utf8_lossy(&lines)
             .split("\r\n")
             .into_iter()
             .map(|s| String::from(s))
